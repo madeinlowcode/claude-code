@@ -38,7 +38,34 @@
             "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -qE '\\.(ts|tsx)$'; then app=$(echo \"$file_path\" | sed -n 's|.*/monorepo/apps/\\([^/]*\\)/.*|\\1|p'); if [ -n \"$app\" ]; then echo \"[$(date)] Running full typecheck for $app (triggered by: $file_path)\" >> ~/.claude/command-log.txt; dir=\"$(dirname \"$file_path\")\"; while [ \"$dir\" != \"/\" ] && [ ! -f \"$dir/turbo.json\" ]; do dir=\"$(dirname \"$dir\")\"; done; if [ -f \"$dir/turbo.json\" ]; then cd \"$dir\" && output=$(npx turbo typecheck --filter \"$app\" 2>&1); exit_code=$?; echo \"$output\" | tee -a ~/.claude/command-log.txt; if [ $exit_code -ne 0 ]; then echo \"TypeScript found type errors in $app. Please fix the following:\" >&2; echo \"$output\" >&2; exit 2; fi; fi; fi; else echo \"[$(date)] Skipping typecheck for non-TS file: $file_path\" >> ~/.claude/command-log.txt; fi; }"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "timeout": 30,
+        "description": "Verifica automaticamente o código após edições",
+        "commands": [
+          {
+            "name": "Testes Rápidos",
+            "command": "npm test -- --passWithNoTests 2>&1 | tail -15",
+            "continueOnError": true
+          },
+          {
+            "name": "Lint",
+            "command": "npm run lint 2>&1 | head -10",
+            "continueOnError": true
+          }
+        ]
       }
     ]
-  }
+  },
+  "permissions": {
+      "bash": {
+        "allowed": [
+          "npm test",
+          "npm run lint",
+          "npm run type-check",
+          "npm run test:coverage"
+        ]
+      }
+    }
 }
