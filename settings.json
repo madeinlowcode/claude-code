@@ -1,4 +1,11 @@
 {
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/settings.schema.json",
+  "description": "Template de configuração de hooks para projetos React/TypeScript. Copie este arquivo para .claude/settings.local.json em outros projetos e ajuste conforme necessário.",
+
+  "enabledPlugins": {
+    "playwright@claude-plugins-official": true
+  },
+
   "hooks": {
     "PreToolUse": [
       {
@@ -6,66 +13,90 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '\"\\(.tool_input.command) - \\(.tool_input.description // \"No description\")\"' >> ~/.claude/bash-command-log.txt"
+            "command": "echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Bash: $(jq -r '.tool_input.command // \"no command\"')\" >> ~/.claude/bash-command-log.txt || true"
           }
         ]
       }
     ],
+
     "PostToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit",
+        "timeout": 90,
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -qE '\\.(js|jsx|ts|tsx)$'; then echo \"[$(date)] Running prettier on: $file_path\" >> ~/.claude/command-log.txt; dir=\"$(dirname \"$file_path\")\"; while [ \"$dir\" != \"/\" ] && [ ! -f \"$dir/package.json\" ]; do dir=\"$(dirname \"$dir\")\"; done; if [ -f \"$dir/package.json\" ]; then cd \"$dir\" && npx prettier --write \"$file_path\" 2>&1 | tee -a ~/.claude/command-log.txt; else echo \"[$(date)] No package.json found for: $file_path\" >> ~/.claude/command-log.txt; fi; else echo \"[$(date)] Skipping non-JS/TS file: $file_path\" >> ~/.claude/command-log.txt; fi; }"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -qE '\\.(js|jsx|ts|tsx)$'; then echo \"[$(date)] Running eslint on: $file_path\" >> ~/.claude/command-log.txt; dir=\"$(dirname \"$file_path\")\"; while [ \"$dir\" != \"/\" ] && [ ! -f \"$dir/package.json\" ]; do dir=\"$(dirname \"$dir\")\"; done; if [ -f \"$dir/package.json\" ]; then cd \"$dir\" && output=$(npx eslint \"$file_path\" --max-warnings 0 2>&1); exit_code=$?; echo \"$output\" | tee -a ~/.claude/command-log.txt; if [ $exit_code -ne 0 ]; then echo \"ESLint found issues in $file_path. Please fix the following:\" >&2; echo \"$output\" >&2; exit 2; fi; else echo \"[$(date)] No package.json found for: $file_path\" >> ~/.claude/command-log.txt; fi; else echo \"[$(date)] Skipping lint for non-JS/TS file: $file_path\" >> ~/.claude/command-log.txt; fi; }"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -qE '\\.(ts|tsx)$'; then app=$(echo \"$file_path\" | sed -n 's|.*/monorepo/apps/\\([^/]*\\)/.*|\\1|p'); if [ -n \"$app\" ]; then echo \"[$(date)] Running full typecheck for $app (triggered by: $file_path)\" >> ~/.claude/command-log.txt; dir=\"$(dirname \"$file_path\")\"; while [ \"$dir\" != \"/\" ] && [ ! -f \"$dir/turbo.json\" ]; do dir=\"$(dirname \"$dir\")\"; done; if [ -f \"$dir/turbo.json\" ]; then cd \"$dir\" && output=$(npx turbo typecheck --filter \"$app\" 2>&1); exit_code=$?; echo \"$output\" | tee -a ~/.claude/command-log.txt; if [ $exit_code -ne 0 ]; then echo \"TypeScript found type errors in $app. Please fix the following:\" >&2; echo \"$output\" >&2; exit 2; fi; fi; fi; else echo \"[$(date)] Skipping typecheck for non-TS file: $file_path\" >> ~/.claude/command-log.txt; fi; }"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "timeout": 30,
-        "description": "Verifica automaticamente o código após edições",
-        "commands": [
-          {
-            "name": "Testes Rápidos",
-            "command": "npm test -- --passWithNoTests 2>&1 | tail -15",
-            "continueOnError": true
+            "command": "file_path=$(echo '{}' | jq -r '.tool_input.file_path // empty'); if [[ -n \"$file_path\" && \"$file_path\" =~ \\.(js|jsx|ts|tsx)$ ]]; then echo \"[$(date '+%Y-%m-%d %H:%M:%S')] 🎨 Prettier: $file_path\" >> ~/.claude/command-log.txt; project_dir=\"$(dirname \"$file_path\")\"; while [[ \"$project_dir\" != \"/\" && ! -f \"$project_dir/package.json\" ]]; do project_dir=\"$(dirname \"$project_dir\")\"; done; if [[ -f \"$project_dir/package.json\" ]]; then cd \"$project_dir\" && npx prettier --write \"$file_path\" 2>&1 | tee -a ~/.claude/command-log.txt; else echo \"No package.json found\" >> ~/.claude/command-log.txt; fi; fi || true",
+            "timeout": 30,
+            "description": "Formata código JavaScript/TypeScript com Prettier"
           },
           {
-            "name": "Lint",
-            "command": "npm run lint 2>&1 | head -10",
-            "continueOnError": true
+            "type": "command",
+            "command": "file_path=$(echo '{}' | jq -r '.tool_input.file_path // empty'); if [[ -n \"$file_path\" && \"$file_path\" =~ \\.(ts|tsx)$ ]]; then echo \"[$(date '+%Y-%m-%d %H:%M:%S')] 🔍 ESLint: $file_path\" >> ~/.claude/command-log.txt; project_dir=\"$(dirname \"$file_path\")\"; while [[ \"$project_dir\" != \"/\" && ! -f \"$project_dir/package.json\" ]]; do project_dir=\"$(dirname \"$project_dir\")\"; done; if [[ -f \"$project_dir/package.json\" ]]; then cd \"$project_dir\" && npm run lint -- \"$file_path\" 2>&1 | tee -a ~/.claude/command-log.txt || echo \"⚠️ ESLint warnings/errors found\" >> ~/.claude/command-log.txt; else echo \"No package.json found\" >> ~/.claude/command-log.txt; fi; fi || true",
+            "timeout": 30,
+            "description": "Valida código com ESLint"
+          },
+          {
+            "type": "command",
+            "command": "file_path=$(echo '{}' | jq -r '.tool_input.file_path // empty'); if [[ -n \"$file_path\" && \"$file_path\" =~ \\.(ts|tsx)$ ]]; then echo \"[$(date '+%Y-%m-%d %H:%M:%S')] 📝 TypeCheck: running...\" >> ~/.claude/command-log.txt; project_dir=\"$(dirname \"$file_path\")\"; while [[ \"$project_dir\" != \"/\" && ! -f \"$project_dir/package.json\" ]]; do project_dir=\"$(dirname \"$project_dir\")\"; done; if [[ -f \"$project_dir/package.json\" ]]; then cd \"$project_dir\" && npm run type-check 2>&1 | tail -20 | tee -a ~/.claude/command-log.txt || echo \"⚠️ Type errors found\" >> ~/.claude/command-log.txt; else echo \"No package.json found\" >> ~/.claude/command-log.txt; fi; fi || true",
+            "timeout": 45,
+            "description": "Verifica tipos TypeScript"
+          },
+          {
+            "type": "command",
+            "command": "file_path=$(echo '{}' | jq -r '.tool_input.file_path // empty'); if [[ -n \"$file_path\" && \"$file_path\" =~ \\.(ts|tsx)$ && ! \"$file_path\" =~ \\.test\\.(ts|tsx)$ ]]; then echo \"[$(date '+%Y-%m-%d %H:%M:%S')] 🧪 Tests: running related tests...\" >> ~/.claude/command-log.txt; project_dir=\"$(dirname \"$file_path\")\"; while [[ \"$project_dir\" != \"/\" && ! -f \"$project_dir/package.json\" ]]; do project_dir=\"$(dirname \"$project_dir\")\"; done; if [[ -f \"$project_dir/package.json\" ]]; then cd \"$project_dir\" && npm test -- --run --reporter=verbose 2>&1 | tail -30 | tee -a ~/.claude/command-log.txt || echo \"⚠️ Some tests failed or no tests found\" >> ~/.claude/command-log.txt; else echo \"No package.json found\" >> ~/.claude/command-log.txt; fi; fi || true",
+            "timeout": 60,
+            "description": "Executa testes relacionados"
           }
         ]
       }
     ]
   },
+
   "permissions": {
-      "bash": {
-        "allowed": [
-          "npm test",
-          "npm run lint",
-          "npm run type-check",
-          "npm run test:coverage"
-        ]
-      }
+    "bash": {
+      "allowed": [
+        "mcp__serena__read_memory",
+        "npm test",
+        "npm run lint",
+        "npm run lint:fix",
+        "npm run lint:ci",
+        "npm run type-check",
+        "npm run test:coverage",
+        "npm run test:ui",
+        "npm run dev",
+        "npm run build",
+        "npm run preview",
+        "git add",
+        "git commit",
+        "git push",
+        "git status",
+        "git rev-parse",
+        "git log",
+        "git diff",
+        "gh pr create",
+        "glab mr create"
+      ]
     }
+  },
+
+  "_notes": {
+    "description": "Notas sobre este template:",
+    "requirements": [
+      "Git Bash ou WSL no Windows",
+      "jq instalado (geralmente vem com Git Bash)",
+      "Projeto com package.json",
+      "Scripts: lint, type-check, test no package.json"
+    ],
+    "customization": [
+      "Ajuste os timeouts conforme o tamanho do projeto",
+      "Adicione/remova hooks conforme necessário",
+      "Modifique os padrões de arquivo (regex) se usar outras extensões",
+      "Atualize a lista de permissões bash conforme seus scripts"
+    ],
+    "logs": [
+      "~/.claude/command-log.txt - Validações pós-edição",
+      "~/.claude/bash-command-log.txt - Comandos Bash executados"
+    ]
+  }
 }
