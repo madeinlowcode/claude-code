@@ -1,0 +1,44 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '\"\\(.tool_input.command) - \\(.tool_input.description // \"No description\")\"' >> ~/.claude/bash-command-log.txt"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -qE '\\.(js|jsx|ts|tsx)$'; then echo \"[$(date)] Running prettier on: $file_path\" >> ~/.claude/command-log.txt; dir=\"$(dirname \"$file_path\")\"; while [ \"$dir\" != \"/\" ] && [ ! -f \"$dir/package.json\" ]; do dir=\"$(dirname \"$dir\")\"; done; if [ -f \"$dir/package.json\" ]; then cd \"$dir\" && npx prettier --write \"$file_path\" 2>&1 | tee -a ~/.claude/command-log.txt; else echo \"[$(date)] No package.json found for: $file_path\" >> ~/.claude/command-log.txt; fi; else echo \"[$(date)] Skipping non-JS/TS file: $file_path\" >> ~/.claude/command-log.txt; fi; }"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -qE '\\.(js|jsx|ts|tsx)$'; then echo \"[$(date)] Running eslint on: $file_path\" >> ~/.claude/command-log.txt; dir=\"$(dirname \"$file_path\")\"; while [ \"$dir\" != \"/\" ] && [ ! -f \"$dir/package.json\" ]; do dir=\"$(dirname \"$dir\")\"; done; if [ -f \"$dir/package.json\" ]; then cd \"$dir\" && output=$(npx eslint \"$file_path\" --max-warnings 0 2>&1); exit_code=$?; echo \"$output\" | tee -a ~/.claude/command-log.txt; if [ $exit_code -ne 0 ]; then echo \"ESLint found issues in $file_path. Please fix the following:\" >&2; echo \"$output\" >&2; exit 2; fi; else echo \"[$(date)] No package.json found for: $file_path\" >> ~/.claude/command-log.txt; fi; else echo \"[$(date)] Skipping lint for non-JS/TS file: $file_path\" >> ~/.claude/command-log.txt; fi; }"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read file_path; if echo \"$file_path\" | grep -qE '\\.(ts|tsx)$'; then app=$(echo \"$file_path\" | sed -n 's|.*/monorepo/apps/\\([^/]*\\)/.*|\\1|p'); if [ -n \"$app\" ]; then echo \"[$(date)] Running full typecheck for $app (triggered by: $file_path)\" >> ~/.claude/command-log.txt; dir=\"$(dirname \"$file_path\")\"; while [ \"$dir\" != \"/\" ] && [ ! -f \"$dir/turbo.json\" ]; do dir=\"$(dirname \"$dir\")\"; done; if [ -f \"$dir/turbo.json\" ]; then cd \"$dir\" && output=$(npx turbo typecheck --filter \"$app\" 2>&1); exit_code=$?; echo \"$output\" | tee -a ~/.claude/command-log.txt; if [ $exit_code -ne 0 ]; then echo \"TypeScript found type errors in $app. Please fix the following:\" >&2; echo \"$output\" >&2; exit 2; fi; fi; fi; else echo \"[$(date)] Skipping typecheck for non-TS file: $file_path\" >> ~/.claude/command-log.txt; fi; }"
+          }
+        ]
+      }
+    ]
+  }
+}
